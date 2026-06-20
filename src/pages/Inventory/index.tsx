@@ -1,33 +1,61 @@
+import { useMemo } from 'react';
 import PageHeader from "@/components/PageHeader";
 import { useFruitStore } from "@/store/fruitStore";
 import { useInventoryStore } from "@/store/inventoryStore";
+import { useSaleStore } from "@/store/saleStore";
 import { cn } from "@/lib/utils";
+import { formatDate, getDaysAgo } from "@/utils/date";
+import { calculateDynamicDailySalesRate } from "@/utils/calculation";
 
 export default function Inventory() {
   const getFruitById = useFruitStore((state) => state.getFruitById);
   const inventory = useInventoryStore((state) => state.inventory);
+  const getSalesByDateRange = useSaleStore((state) => state.getSalesByDateRange);
 
-  const inventoryWithFruit = inventory
-    .map((inv) => {
-      const fruit = getFruitById(inv.fruitId);
-      if (!fruit) return null;
-      const daysLeft = inv.dailySalesRate > 0 ? inv.stock / inv.dailySalesRate : Infinity;
-      let status: "充足" | "预警" | "不足";
-      if (inv.stock <= 0) {
-        status = "不足";
-      } else if (daysLeft < fruit.warningDays) {
-        status = "预警";
-      } else {
-        status = "充足";
-      }
-      return {
-        ...inv,
-        fruit,
-        daysLeft: inv.dailySalesRate > 0 ? Number(daysLeft.toFixed(1)) : Infinity,
-        status,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const today = formatDate(new Date());
+  const sevenDaysAgo = formatDate(getDaysAgo(6));
+  const thirtyDaysAgo = formatDate(getDaysAgo(29));
+
+  const inventoryWithFruit = useMemo(() => {
+    const sales7Days = getSalesByDateRange(sevenDaysAgo, today);
+    const sales30Days = getSalesByDateRange(thirtyDaysAgo, today);
+
+    return inventory
+      .map((inv) => {
+        const fruit = getFruitById(inv.fruitId);
+        if (!fruit) return null;
+
+        let dailySalesRate = calculateDynamicDailySalesRate(sales7Days, inv.fruitId, 7);
+
+        if (dailySalesRate === 0) {
+          dailySalesRate = calculateDynamicDailySalesRate(sales30Days, inv.fruitId, 30);
+        }
+
+        const hasSalesData = dailySalesRate > 0;
+        const daysLeft = hasSalesData ? inv.stock / dailySalesRate : Infinity;
+
+        let status: "充足" | "预警" | "不足";
+        if (inv.stock <= 0) {
+          status = "不足";
+        } else if (!hasSalesData) {
+          status = "充足";
+        } else if (daysLeft < fruit.warningDays) {
+          status = "预警";
+        } else {
+          status = "充足";
+        }
+
+        return {
+          ...inv,
+          fruit,
+          dailySalesRate: Number(dailySalesRate.toFixed(1)),
+          daysLeft: hasSalesData ? Number(daysLeft.toFixed(1)) : Infinity,
+          hasSalesData,
+          status,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [inventory, getFruitById, getSalesByDateRange, sevenDaysAgo, today, thirtyDaysAgo]);
 
   const statusConfig = {
     充足: {
@@ -87,10 +115,10 @@ export default function Inventory() {
                 <span
                   className={cn(
                     "font-semibold",
-                    item.status !== "充足" ? "text-red-600" : "text-gray-800"
+                    !item.hasSalesData ? "text-gray-500" : item.status !== "充足" ? "text-red-600" : "text-gray-800"
                   )}
                 >
-                  {item.daysLeft === Infinity ? "∞" : `${item.daysLeft} 天`}
+                  {!item.hasSalesData ? "暂无销售数据" : item.daysLeft === Infinity ? "∞" : `${item.daysLeft} 天`}
                 </span>
               </div>
             </div>

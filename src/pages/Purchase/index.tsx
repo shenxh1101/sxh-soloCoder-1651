@@ -1,10 +1,43 @@
 import { useState, useMemo } from 'react';
+import { Star } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import { useFruitStore } from '@/store/fruitStore';
 import { useSupplierStore } from '@/store/supplierStore';
 import { usePurchaseStore } from '@/store/purchaseStore';
 import { formatCurrency } from '@/utils/calculation';
 import { format as dateFormat } from 'date-fns';
+import { cn } from '@/lib/utils';
+
+function StarRating({ score, onChange, readonly }: { score: number; onChange?: (v: number) => void; readonly?: boolean }) {
+  const [hoverScore, setHoverScore] = useState(0);
+
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((i) => {
+        const active = (hoverScore || score) >= i;
+        return (
+          <button
+            key={i}
+            type="button"
+            disabled={readonly}
+            onMouseEnter={() => !readonly && setHoverScore(i)}
+            onMouseLeave={() => !readonly && setHoverScore(0)}
+            onClick={() => onChange && onChange(i)}
+            className={cn(readonly ? 'cursor-default' : 'cursor-pointer transition-transform hover:scale-110')}
+          >
+            <Star
+              className={cn(
+                'h-6 w-6 transition-colors',
+                active ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
+              )}
+            />
+          </button>
+        );
+      })}
+      <span className="ml-2 text-sm font-medium text-gray-600">{score} 星</span>
+    </div>
+  );
+}
 
 export default function Purchase() {
   const { fruits } = useFruitStore();
@@ -15,6 +48,7 @@ export default function Purchase() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [unitPrice, setUnitPrice] = useState<string>('');
+  const [qualityScore, setQualityScore] = useState<number>(5);
   const [remark, setRemark] = useState<string>('');
 
   const totalAmount = useMemo(() => {
@@ -44,12 +78,14 @@ export default function Purchase() {
       quantity: qty,
       unitPrice: price,
       purchaseDate: new Date().toISOString(),
+      qualityScore,
       remark: remark || undefined,
     });
     setSelectedFruitId('');
     setSelectedSupplierId('');
     setQuantity('');
     setUnitPrice('');
+    setQualityScore(5);
     setRemark('');
   };
 
@@ -134,6 +170,11 @@ export default function Purchase() {
         </div>
 
         <div className="mt-4">
+          <label className="mb-2 block text-sm font-medium text-gray-700">本批质量评分</label>
+          <StarRating score={qualityScore} onChange={setQualityScore} />
+        </div>
+
+        <div className="mt-4">
           <label className="mb-2 block text-sm font-medium text-gray-700">备注（可选）</label>
           <input
             type="text"
@@ -168,6 +209,8 @@ export default function Purchase() {
                   <th className="pb-3 font-medium">单价</th>
                   <th className="pb-3 font-medium">总金额</th>
                   <th className="pb-3 font-medium">供货商</th>
+                  <th className="pb-3 font-medium">质量评分</th>
+                  <th className="pb-3 font-medium">备注</th>
                 </tr>
               </thead>
               <tbody>
@@ -191,6 +234,29 @@ export default function Purchase() {
                         {formatCurrency(p.totalAmount)}
                       </td>
                       <td className="py-3 text-gray-700">{supplier?.name}</td>
+                      <td className="py-3">
+                        <div className="flex items-center gap-1">
+                          {p.qualityScore ? (
+                            <>
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <Star
+                                  key={i}
+                                  className={cn(
+                                    'h-4 w-4',
+                                    i <= p.qualityScore! ? 'fill-amber-400 text-amber-400' : 'text-gray-300'
+                                  )}
+                                />
+                              ))}
+                              <span className="ml-1 text-xs text-gray-500">{p.qualityScore}星</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 text-gray-600 max-w-[150px] truncate">
+                        {p.remark || '-'}
+                      </td>
                     </tr>
                   );
                 })}

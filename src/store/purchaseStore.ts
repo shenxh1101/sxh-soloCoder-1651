@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useInventoryStore } from './inventoryStore';
-import { format, parseISO, isSameDay, isSameMonth } from 'date-fns';
+import { parseISO, isSameDay } from 'date-fns';
 
 export interface Purchase {
   id: string;
@@ -11,6 +11,7 @@ export interface Purchase {
   unitPrice: number;
   totalAmount: number;
   purchaseDate: string;
+  qualityScore?: number;
   remark?: string;
   createdAt: string;
 }
@@ -39,8 +40,7 @@ export const usePurchaseStore = create<PurchaseState>()(
           createdAt: new Date().toISOString(),
         };
         set((state) => ({ purchases: [newPurchase, ...state.purchases] }));
-        useInventoryStore.getState().updateStock(purchase.fruitId, purchase.quantity, 'purchase');
-        useInventoryStore.getState().updateAvgCostPrice(purchase.fruitId, purchase.unitPrice, purchase.quantity);
+        useInventoryStore.getState().purchaseAndUpdateCost(purchase.fruitId, purchase.quantity, purchase.unitPrice);
       },
       getPurchasesByDate: (date) => {
         const targetDate = parseISO(date);

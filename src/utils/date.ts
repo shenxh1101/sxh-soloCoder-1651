@@ -4,6 +4,7 @@ import {
   subDays,
   startOfMonth as dateFnsStartOfMonth,
   endOfMonth as dateFnsEndOfMonth,
+  addDays,
 } from "date-fns";
 import { zhCN } from "date-fns/locale";
 
@@ -34,4 +35,16 @@ export function startOfMonth(date?: Date | string): Date {
 export function endOfMonth(date?: Date | string): Date {
   const d = date ? (typeof date === "string" ? new Date(date) : date) : new Date();
   return dateFnsEndOfMonth(d);
+}
+
+export function getDateRange(startDate: string, endDate: string): string[] {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const dates: string[] = [];
+  let current = start;
+  while (current <= end) {
+    dates.push(formatDate(current));
+    current = addDays(current, 1);
+  }
+  return dates;
 }

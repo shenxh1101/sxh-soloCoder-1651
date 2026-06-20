@@ -29,6 +29,7 @@ export default function LossPage() {
   const [quantity, setQuantity] = useState<string>('');
   const [lossReason, setLossReason] = useState<string>('腐烂');
   const [remark, setRemark] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const selectedInventory = useMemo(
     () => inventory.find((inv) => inv.fruitId === selectedFruitId),
@@ -51,7 +52,12 @@ export default function LossPage() {
     const qty = parseFloat(quantity);
     if (!selectedFruitId || !qty || qty <= 0) return;
 
-    addLoss({
+    if (selectedInventory && qty > selectedInventory.stock) {
+      setErrorMessage(`库存不足！当前库存仅 ${selectedInventory.stock} 斤`);
+      return;
+    }
+
+    const result = addLoss({
       fruitId: selectedFruitId,
       quantity: qty,
       lossReason,
@@ -59,15 +65,26 @@ export default function LossPage() {
       remark: remark || undefined,
     });
 
-    setSelectedFruitId('');
-    setQuantity('');
-    setLossReason('腐烂');
-    setRemark('');
+    if (result.success) {
+      setSelectedFruitId('');
+      setQuantity('');
+      setLossReason('腐烂');
+      setRemark('');
+      setErrorMessage('');
+    } else {
+      setErrorMessage(result.error || '提交失败，库存不足！');
+    }
   };
 
   const getFruitById = (id: string) => fruits.find((f) => f.id === id);
 
-  const canSubmit = selectedFruitId && parseFloat(quantity) > 0;
+  const isStockExceeded = useMemo(() => {
+    const qty = parseFloat(quantity) || 0;
+    if (!selectedInventory || qty <= 0) return false;
+    return qty > selectedInventory.stock;
+  }, [quantity, selectedInventory]);
+
+  const canSubmit = selectedFruitId && parseFloat(quantity) > 0 && !isStockExceeded;
 
   return (
     <div className="space-y-6">
@@ -78,6 +95,12 @@ export default function LossPage() {
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h3 className="mb-4 text-lg font-semibold text-gray-800">损耗录入</h3>
+
+        {errorMessage && (
+          <div className="mb-4 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
 
         <div className="space-y-5">
           <div>
@@ -193,7 +216,7 @@ export default function LossPage() {
                 : 'cursor-not-allowed bg-gray-300'
             )}
           >
-            提交损耗记录
+            {isStockExceeded ? '库存不足' : '提交损耗记录'}
           </button>
         </div>
       </div>

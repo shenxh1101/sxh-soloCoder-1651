@@ -14,6 +14,7 @@ export default function Sales() {
   const [selectedFruitId, setSelectedFruitId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [unitPrice, setUnitPrice] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   useEffect(() => {
     if (selectedFruitId) {
@@ -59,6 +60,20 @@ export default function Sales() {
     return todaySales.reduce((sum, s) => sum + s.grossProfit, 0);
   }, [todaySales]);
 
+  const isStockExceeded = useMemo(() => {
+    const qty = parseFloat(quantity) || 0;
+    if (!selectedInventory || qty <= 0) return false;
+    return qty > selectedInventory.stock;
+  }, [quantity, selectedInventory]);
+
+  useEffect(() => {
+    if (isStockExceeded && selectedInventory) {
+      setErrorMessage(`库存不足！当前库存仅 ${selectedInventory.stock} 斤`);
+    } else {
+      setErrorMessage('');
+    }
+  }, [isStockExceeded, selectedInventory]);
+
   const handleSubmit = () => {
     if (!selectedFruitId || !quantity || !unitPrice) {
       return;
@@ -69,17 +84,23 @@ export default function Sales() {
       return;
     }
     if (selectedInventory && qty > selectedInventory.stock) {
+      setErrorMessage(`库存不足！当前库存仅 ${selectedInventory.stock} 斤`);
       return;
     }
-    addSale({
+    const result = addSale({
       fruitId: selectedFruitId,
       quantity: qty,
       unitPrice: price,
       saleDate: new Date().toISOString(),
     });
-    setSelectedFruitId('');
-    setQuantity('');
-    setUnitPrice('');
+    if (result.success) {
+      setSelectedFruitId('');
+      setQuantity('');
+      setUnitPrice('');
+      setErrorMessage('');
+    } else {
+      setErrorMessage(result.error || '销售失败，库存不足！');
+    }
   };
 
   return (
@@ -88,6 +109,12 @@ export default function Sales() {
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h3 className="mb-4 text-lg font-semibold text-gray-800">销售录入</h3>
+
+        {errorMessage && (
+          <div className="mb-4 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+            {errorMessage}
+          </div>
+        )}
 
         <div className="mb-5">
           <label className="mb-3 block text-sm font-medium text-gray-700">选择水果</label>
@@ -182,10 +209,10 @@ export default function Sales() {
 
         <button
           onClick={handleSubmit}
-          disabled={!selectedFruitId || !quantity || !unitPrice || (selectedInventory ? parseFloat(quantity) > selectedInventory.stock : false)}
+          disabled={!selectedFruitId || !quantity || !unitPrice || isStockExceeded}
           className="mt-6 w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow-md shadow-primary/30 transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none"
         >
-          提交销售记录
+          {isStockExceeded ? '库存不足' : '提交销售记录'}
         </button>
       </div>
 

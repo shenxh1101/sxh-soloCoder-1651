@@ -1,3 +1,5 @@
+import type { Sale } from '@/types';
+
 export interface WeightedCostItem {
   quantity: number;
   unitPrice: number;
@@ -57,4 +59,11 @@ export function formatCurrency(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+export function calculateDynamicDailySalesRate(sales: Sale[], fruitId: string, days: number): number {
+  if (days <= 0) return 0;
+  const fruitSales = sales.filter((s) => s.fruitId === fruitId);
+  const totalQuantity = fruitSales.reduce((sum, s) => sum + s.quantity, 0);
+  return totalQuantity / days;
 }

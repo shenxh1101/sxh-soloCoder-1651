@@ -25,6 +25,7 @@ export interface Purchase {
   unitPrice: number;
   totalAmount: number;
   purchaseDate: string;
+  qualityScore?: number;
   remark?: string;
   createdAt: string;
 }

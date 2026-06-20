@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { parseISO, differenceInDays, isAfter } from 'date-fns';
+import type { Sale } from './saleStore';
 
 export interface InventoryItem {
   id: string;
@@ -13,8 +15,10 @@ export interface InventoryItem {
 interface InventoryState {
   inventory: InventoryItem[];
   updateStock: (fruitId: string, quantity: number, type: 'purchase' | 'sale' | 'loss') => void;
-  updateAvgCostPrice: (fruitId: string, newCostPrice: number, quantity: number) => void;
+  updateAvgCostPrice: (fruitId: string, newCostPrice: number, quantity: number, oldStock?: number) => void;
   updateDailySalesRate: (fruitId: string, rate: number) => void;
+  purchaseAndUpdateCost: (fruitId: string, quantity: number, unitPrice: number) => void;
+  recalculateDailySalesRate: (fruitId: string, days: number, sales?: Sale[]) => void;
   getInventoryByFruit: (fruitId: string) => InventoryItem | undefined;
   getLowStockItems: (threshold?: number) => InventoryItem[];
 }
@@ -99,15 +103,67 @@ export const useInventoryStore = create<InventoryState>()(
           };
         });
       },
-      updateAvgCostPrice: (fruitId, newCostPrice, quantity) => {
+      updateAvgCostPrice: (fruitId, newCostPrice, quantity, oldStock) => {
         set((state) => ({
           inventory: state.inventory.map((inv) => {
             if (inv.fruitId !== fruitId) return inv;
-            const totalCost = inv.avgCostPrice * inv.stock + newCostPrice * quantity;
-            const totalStock = inv.stock + quantity;
+            const currentStock = oldStock !== undefined ? oldStock : inv.stock;
+            const totalCost = inv.avgCostPrice * currentStock + newCostPrice * quantity;
+            const totalStock = currentStock + quantity;
             const newAvg = totalStock > 0 ? totalCost / totalStock : 0;
             return { ...inv, avgCostPrice: Number(newAvg.toFixed(2)), lastUpdated: new Date().toISOString() };
           }),
+        }));
+      },
+      purchaseAndUpdateCost: (fruitId, quantity, unitPrice) => {
+        set((state) => {
+          const existing = state.inventory.find((inv) => inv.fruitId === fruitId);
+          const now = new Date().toISOString();
+
+          if (!existing) {
+            const newItem: InventoryItem = {
+              id: generateId(),
+              fruitId,
+              stock: quantity,
+              avgCostPrice: Number(unitPrice.toFixed(2)),
+              dailySalesRate: 0,
+              lastUpdated: now,
+            };
+            return { inventory: [...state.inventory, newItem] };
+          }
+
+          const oldStock = existing.stock;
+          const newStock = oldStock + quantity;
+          const totalCost = existing.avgCostPrice * oldStock + unitPrice * quantity;
+          const newAvgCostPrice = newStock > 0 ? totalCost / newStock : 0;
+
+          return {
+            inventory: state.inventory.map((inv) =>
+              inv.fruitId === fruitId
+                ? {
+                    ...inv,
+                    stock: newStock,
+                    avgCostPrice: Number(newAvgCostPrice.toFixed(2)),
+                    lastUpdated: now,
+                  }
+                : inv
+            ),
+          };
+        });
+      },
+      recalculateDailySalesRate: (fruitId, days, sales) => {
+        const now = new Date();
+        const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+        const recentSales = (sales || []).filter((sale) => isAfter(parseISO(sale.saleDate), cutoffDate));
+        const totalQuantity = recentSales.reduce((sum, sale) => sum + sale.quantity, 0);
+        const actualDays = Math.max(1, differenceInDays(now, cutoffDate));
+        const dailyRate = Number((totalQuantity / actualDays).toFixed(2));
+
+        set((state) => ({
+          inventory: state.inventory.map((inv) =>
+            inv.fruitId === fruitId ? { ...inv, dailySalesRate: dailyRate, lastUpdated: new Date().toISOString() } : inv
+          ),
         }));
       },
       updateDailySalesRate: (fruitId, rate) => {

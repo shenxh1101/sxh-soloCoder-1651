@@ -17,7 +17,7 @@ export interface Loss {
 
 interface LossState {
   losses: Loss[];
-  addLoss: (loss: Omit<Loss, 'id' | 'createdAt' | 'unitCostPrice' | 'totalLossAmount'>) => void;
+  addLoss: (loss: Omit<Loss, 'id' | 'createdAt' | 'unitCostPrice' | 'totalLossAmount'>) => { success: boolean; error?: string };
   getLossesByDate: (date: string) => Loss[];
   getLossesByFruit: (fruitId: string) => Loss[];
   getMonthlyLosses: (yearMonth: string) => Loss[];
@@ -31,7 +31,13 @@ export const useLossStore = create<LossState>()(
       losses: [],
       addLoss: (loss) => {
         const inventoryItem = useInventoryStore.getState().getInventoryByFruit(loss.fruitId);
-        const unitCostPrice = inventoryItem?.avgCostPrice || 0;
+        if (!inventoryItem) {
+          return { success: false, error: '库存不存在' };
+        }
+        if (loss.quantity > inventoryItem.stock) {
+          return { success: false, error: '库存不足' };
+        }
+        const unitCostPrice = inventoryItem.avgCostPrice;
         const totalLossAmount = Number((loss.quantity * unitCostPrice).toFixed(2));
 
         const newLoss: Loss = {
@@ -43,6 +49,7 @@ export const useLossStore = create<LossState>()(
         };
         set((state) => ({ losses: [newLoss, ...state.losses] }));
         useInventoryStore.getState().updateStock(loss.fruitId, loss.quantity, 'loss');
+        return { success: true };
       },
       getLossesByDate: (date) => {
         const targetDate = parseISO(date);

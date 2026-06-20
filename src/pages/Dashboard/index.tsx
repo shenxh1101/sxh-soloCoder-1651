@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link } from "react-router-dom";
 import { ShoppingCart, DollarSign, Trash2, TrendingUp, AlertTriangle } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
@@ -7,17 +8,21 @@ import { usePurchaseStore } from "@/store/purchaseStore";
 import { useSaleStore } from "@/store/saleStore";
 import { useLossStore } from "@/store/lossStore";
 import { useInventoryStore } from "@/store/inventoryStore";
-import { formatDate } from "@/utils/date";
+import { formatDate, getDaysAgo } from "@/utils/date";
+import { calculateDynamicDailySalesRate } from "@/utils/calculation";
 
 export default function Dashboard() {
-  const fruits = useFruitStore((state) => state.fruits);
   const getFruitById = useFruitStore((state) => state.getFruitById);
   const getPurchasesByDate = usePurchaseStore((state) => state.getPurchasesByDate);
   const getSalesByDate = useSaleStore((state) => state.getSalesByDate);
+  const getSalesByDateRange = useSaleStore((state) => state.getSalesByDateRange);
   const getLossesByDate = useLossStore((state) => state.getLossesByDate);
   const inventory = useInventoryStore((state) => state.inventory);
 
   const today = formatDate(new Date());
+  const sevenDaysAgo = formatDate(getDaysAgo(6));
+  const thirtyDaysAgo = formatDate(getDaysAgo(29));
+
   const todayPurchases = getPurchasesByDate(today);
   const todaySales = getSalesByDate(today);
   const todayLosses = getLossesByDate(today);
@@ -27,21 +32,34 @@ export default function Dashboard() {
   const todayLossTotal = todayLosses.reduce((sum, l) => sum + l.totalLossAmount, 0);
   const todayGrossProfit = todaySales.reduce((sum, s) => sum + s.grossProfit, 0);
 
-  const warningItems = inventory
-    .map((inv) => {
-      const fruit = getFruitById(inv.fruitId);
-      if (!fruit) return null;
-      const daysLeft = inv.dailySalesRate > 0 ? inv.stock / inv.dailySalesRate : Infinity;
-      if (daysLeft < fruit.warningDays) {
-        return {
-          ...inv,
-          fruit,
-          daysLeft: Number(daysLeft.toFixed(1)),
-        };
-      }
-      return null;
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const warningItems = useMemo(() => {
+    const sales7Days = getSalesByDateRange(sevenDaysAgo, today);
+    const sales30Days = getSalesByDateRange(thirtyDaysAgo, today);
+
+    return inventory
+      .map((inv) => {
+        const fruit = getFruitById(inv.fruitId);
+        if (!fruit) return null;
+
+        let dailySalesRate = calculateDynamicDailySalesRate(sales7Days, inv.fruitId, 7);
+        if (dailySalesRate === 0) {
+          dailySalesRate = calculateDynamicDailySalesRate(sales30Days, inv.fruitId, 30);
+        }
+
+        if (dailySalesRate === 0) return null;
+
+        const daysLeft = inv.stock / dailySalesRate;
+        if (daysLeft < fruit.warningDays) {
+          return {
+            ...inv,
+            fruit,
+            daysLeft: Number(daysLeft.toFixed(1)),
+          };
+        }
+        return null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+  }, [inventory, getFruitById, getSalesByDateRange, sevenDaysAgo, today, thirtyDaysAgo]);
 
   return (
     <div>
